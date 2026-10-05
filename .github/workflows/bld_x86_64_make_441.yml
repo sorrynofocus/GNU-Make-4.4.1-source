@@ -1,9 +1,35 @@
-name: Build GNU Make Windows x64
+# Normal development push:
+#   git add .
+#   git commit -m "Update Windows64 build"
+#   git push
+#
+# Create a release:
+#   git tag v4.4.1-windows64
+#   git push origin v4.4.1-windows64
+#
+# Workflow behavior:
+#   Push to main:
+#     - Build
+#     - Verify x64
+#     - Generate SHA256SUMS
+#     - Upload workflow artifact
+#
+#   Push tag matching v*-windows64:
+#     - Build
+#     - Verify x64
+#     - Generate SHA256SUMS
+#     - Upload workflow artifact
+#     - Create GitHub Release
+#     - Attach make.exe and SHA256SUMS
+
+name: Build GNU Make on Windows x64
 
 on:
   push:
     branches:
       - main
+    tags:
+      - "v*-windows64"      
 
   pull_request:
     branches:
@@ -12,12 +38,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-windows-x64:
     name: Windows x64
-    runs-on: windows-2022
+    runs-on: windows-2022 # Keep this pinned to the VS 2022 runner
     timeout-minutes: 15
 
     steps:
@@ -181,3 +207,16 @@ jobs:
             Win64Rel/make.exe
             Win64Rel/SHA256SUMS
           if-no-files-found: error
+
+      - name: Release Deployment
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: cmd
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" ^
+            Win64Rel\make.exe ^
+            Win64Rel\SHA256SUMS ^
+            --verify-tag ^
+            --title "GNU Make 4.4.1 Windows x64" ^
+            --notes "Unofficial Windows x64 build of GNU Make 4.4.1."        
