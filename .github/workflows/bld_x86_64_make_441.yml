@@ -1,0 +1,183 @@
+name: Build GNU Make Windows x64
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-x64:
+    name: Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Bootstrap and build GNU Make x64
+        shell: cmd
+        run: |
+          @echo on
+
+          echo ============================================================
+          echo Initialize Visual Studio 2022 x64 build environment
+          echo ============================================================
+
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+
+          if errorlevel 1 exit /b 1
+
+          echo.
+          echo ============================================================
+          echo Verify MSVC environment
+          echo ============================================================
+
+          echo HOST_ARCH=%VSCMD_ARG_HOST_ARCH%
+          echo TARGET_ARCH=%VSCMD_ARG_TGT_ARCH%
+
+          if /I not "%VSCMD_ARG_HOST_ARCH%"=="x64" (
+              echo ERROR: MSVC host architecture is not x64.
+              exit /b 1
+          )
+
+          if /I not "%VSCMD_ARG_TGT_ARCH%"=="x64" (
+              echo ERROR: MSVC target architecture is not x64.
+              exit /b 1
+          )
+
+          where cl
+          where link
+          where dumpbin
+
+          echo.
+          echo ============================================================
+          echo Bootstrap GNU Make
+          echo ============================================================
+
+          call build_w32.bat --without-guile
+
+          if errorlevel 1 exit /b 1
+
+          if not exist WinRel\make.exe (
+              echo ERROR: Bootstrap did not produce WinRel\make.exe.
+              exit /b 1
+          )
+
+          echo.
+          echo Bootstrap version:
+          WinRel\make.exe --version
+
+          echo.
+          echo ============================================================
+          echo Build custom Windows64 configuration
+          echo ============================================================
+
+          WinRel\make.exe -f Basic.mk MAKE_HOST=Windows64 TOOLCHAIN=msvc
+
+          if errorlevel 1 exit /b 1
+
+          if not exist Win64Rel\make.exe (
+              echo ERROR: Windows64 build did not produce Win64Rel\make.exe.
+              exit /b 1
+          )
+
+          echo.
+          echo ============================================================
+          echo Verify GNU Make version
+          echo ============================================================
+
+          Win64Rel\make.exe --version
+
+          echo.
+          echo ============================================================
+          echo Verify PE architecture
+          echo ============================================================
+
+          dumpbin /headers Win64Rel\make.exe | findstr "machine"
+
+          dumpbin /headers Win64Rel\make.exe | findstr /C:"8664 machine (x64)"
+
+          if errorlevel 1 (
+              echo ERROR: Win64Rel\make.exe is not an x64 executable.
+              exit /b 1
+          )
+
+          echo.
+          echo ============================================================
+          echo Test Windows64 clean target
+          echo ============================================================
+
+          WinRel\make.exe -f Basic.mk MAKE_HOST=Windows64 TOOLCHAIN=msvc clean
+
+          if errorlevel 1 exit /b 1
+
+          if exist Win64Rel\make.exe (
+              echo ERROR: clean did not remove Win64Rel\make.exe.
+              exit /b 1
+          )
+
+          echo Clean completed successfully.
+
+          echo.
+          echo ============================================================
+          echo Rebuild after clean
+          echo ============================================================
+
+          WinRel\make.exe -f Basic.mk MAKE_HOST=Windows64 TOOLCHAIN=msvc
+
+          if errorlevel 1 exit /b 1
+
+          if not exist Win64Rel\make.exe (
+              echo ERROR: Rebuild did not produce Win64Rel\make.exe.
+              exit /b 1
+          )
+
+          echo.
+          echo ============================================================
+          echo Final architecture verification
+          echo ============================================================
+
+          dumpbin /headers Win64Rel\make.exe | findstr /C:"8664 machine (x64)"
+
+          if errorlevel 1 (
+              echo ERROR: Rebuilt executable is not x64.
+              exit /b 1
+          )
+
+          echo.
+          echo GNU Make Windows64 build completed successfully.
+
+          echo.
+          echo ============================================================
+          echo SHA-256 chcks. ...
+          echo ============================================================
+
+          for /f "skip=1 tokens=*" %%H in ('certutil -hashfile Win64Rel\make.exe SHA256 ^| findstr /V /C:"CertUtil"') do (
+              echo %%H  make.exe> Win64Rel\SHA256SUMS
+              goto :hashdone
+          )
+          :hashdone
+
+          if errorlevel 1 (
+              echo ERROR: Failed to calculate SHA-256.
+              exit /b 1
+          )
+
+      - name: Upload executable bin
+        uses: actions/upload-artifact@v7
+        with:
+          name: gnu-make-4.4.1-windows-x64
+          path: |
+            Win64Rel/make.exe
+            Win64Rel/SHA256SUMS
+          if-no-files-found: error
