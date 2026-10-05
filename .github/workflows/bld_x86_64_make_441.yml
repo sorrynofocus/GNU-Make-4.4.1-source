@@ -43,6 +43,7 @@ permissions:
 jobs:
   build-windows-x64:
     name: Windows x64
+    # https://github.com/actions/runner-images/blob/main/images/windows/Windows2022-Readme.md
     runs-on: windows-2022 # Keep this pinned to the VS 2022 runner
     timeout-minutes: 15
 
