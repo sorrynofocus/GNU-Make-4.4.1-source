@@ -1,0 +1,22 @@
+# GNU Make Windows build output
+WinRel/
+WinDebug/
+Win64Rel/
+Win64Debug/
+
+# GCC build output
+GccRel/
+GccDebug/
+Gcc64Rel/
+Gcc64Debug/
+
+# MSVC build artifacts
+*.obj
+*.pdb
+*.ilk
+
+# Executables generated during local builds
+*.exe
+
+# Visual Studio
+.vs/
